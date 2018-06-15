@@ -9,6 +9,9 @@ import (
 	"github.com/urfave/cli"
 )
 
+const dateFormat = "2006-01-02"
+const daysAgo = 15
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "Cryptocurrencies Price Tracker"
@@ -29,12 +32,17 @@ func main() {
 			targetTime = time.Now().Local()
 		} else {
 			var err error
-			targetTime, err = time.Parse("2006-01-02", date)
+			targetTime, err = time.Parse(dateFormat, date)
 			if err != nil {
 				return err
 			}
 		}
-		fmt.Println("Target time is", targetTime.Format("2006-01-02"))
+
+		fmt.Println("Target time is:", targetTime.Format(dateFormat))
+
+		startTime := targetTime.Add(-daysAgo * 24 * time.Hour)
+
+		fmt.Println("Getting price information from:", startTime.Format(dateFormat))
 
 		return nil
 	}
