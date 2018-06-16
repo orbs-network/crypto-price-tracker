@@ -195,10 +195,11 @@ func main() {
 
 		fmt.Println("Target time is:", targetTime.Format(dateFormat))
 
-		data := getPriceData(targetTime, c.String("currency"))
+		currency := c.String("currency")
+		data := getPriceData(targetTime, currency)
 
 		fmt.Println("****************************************")
-		fmt.Println("Result for", data.date.Format(dateFormat), "-",
+		fmt.Println("Result for", currency, "at", data.date.Format(dateFormat), "-",
 			"volume:", data.volume,
 			"close:", data.close, "USD",
 			lastDaysAverageDurationDays, "days average:", data.average, "USD",
