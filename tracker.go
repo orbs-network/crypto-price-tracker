@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -10,16 +12,28 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tealeg/xlsx"
+
 	"github.com/PuerkitoBio/goquery"
 	"github.com/RobinUS2/golang-moving-average"
-	"github.com/tealeg/xlsx"
 	"github.com/urfave/cli"
 )
 
+const configFileName = "config.json"
 const dateFormat = "2006-01-02"
 const queryDateFormat = "20060102"
 const lastDaysAverageDurationDays = 15
 const cmcQueryURL = "https://coinmarketcap.com/currencies/%s/historical-data/"
+
+type Currency struct {
+	Name   string `json:"name"`
+	Symbol string `json:"symbol"`
+	Cmc    string `json:"cmc"`
+}
+
+type Currencies struct {
+	Currencies []Currency `json:"currencies"`
+}
 
 type historicPriceData struct {
 	date      time.Time
@@ -77,9 +91,14 @@ func parseData(doc *goquery.Document) []historicPriceData {
 			log.Fatal(err)
 		}
 
-		dataElement.marketCap, err = strconv.ParseInt(strings.Replace(nodes[6], ",", "", -1), 10, 64)
-		if err != nil {
-			log.Fatal(err)
+		marketCap := strings.Replace(nodes[6], ",", "", -1)
+		if marketCap == "-" {
+			dataElement.marketCap = 0.0
+		} else {
+			dataElement.marketCap, err = strconv.ParseInt(strings.Replace(nodes[6], ",", "", -1), 10, 64)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 
 		data = append(data, dataElement)
@@ -88,8 +107,8 @@ func parseData(doc *goquery.Document) []historicPriceData {
 	return data
 }
 
-func getPriceData(startTime time.Time, endTime time.Time, currency string) ([]historicPriceData, error) {
-	queryURL, err := url.Parse(fmt.Sprintf(cmcQueryURL, currency))
+func getPriceData(currency Currency, startTime time.Time, endTime time.Time) ([]historicPriceData, error) {
+	queryURL, err := url.Parse(fmt.Sprintf(cmcQueryURL, currency.Cmc))
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +144,7 @@ func getPriceData(startTime time.Time, endTime time.Time, currency string) ([]hi
 	return data, nil
 }
 
-func writePriceData(fileName string, currency string, data []historicPriceData) error {
+func writePriceData(fileName string, currency Currency, data []historicPriceData) error {
 	err := writeHeaders(fileName, currency)
 	if err != nil {
 		return err
@@ -136,7 +155,7 @@ func writePriceData(fileName string, currency string, data []historicPriceData) 
 
 	for i, j := len(data)-1, 0; i >= 0; i-- {
 		e := data[i]
-		fmt.Println("Processing", currency, e.date.Format(dateFormat), "-",
+		fmt.Println("Processing:", currency.Name, e.date.Format(dateFormat), "-",
 			"open:", e.open, "USD",
 			"high:", e.high, "USD",
 			"low:", e.low, "USD",
@@ -152,8 +171,10 @@ func writePriceData(fileName string, currency string, data []historicPriceData) 
 			average = 0
 		}
 
-		j++
-		ma.Add(e.close)
+		if e.close > 0 {
+			j++
+			ma.Add(e.close)
+		}
 
 		err := writeData(fileName, currency, e, average)
 		if err != nil {
@@ -166,11 +187,18 @@ func writePriceData(fileName string, currency string, data []historicPriceData) 
 	return nil
 }
 
-func writeHeaders(fileName string, currency string) error {
-	file := xlsx.NewFile()
+func writeHeaders(fileName string, currency Currency) error {
+	file, err := xlsx.OpenFile(fileName)
+	if err != nil {
+		if os.IsNotExist(err) {
+			file = xlsx.NewFile()
+		} else {
+			return err
+		}
+	}
 	defer file.Save(fileName)
 
-	sheet, err := file.AddSheet(currency)
+	sheet, err := file.AddSheet(currency.Name)
 	if err != nil {
 		return err
 	}
@@ -204,15 +232,24 @@ func writeHeaders(fileName string, currency string) error {
 	return nil
 }
 
-func writeData(fileName string, currency string, data historicPriceData, average float64) error {
+func writeData(fileName string, currency Currency, data historicPriceData, average float64) error {
 	file, err := xlsx.OpenFile(fileName)
 	if err != nil {
-		return err
+		if os.IsNotExist(err) {
+			file = xlsx.NewFile()
+		} else {
+			return err
+		}
 	}
-
 	defer file.Save(fileName)
 
-	sheet := file.Sheet[currency]
+	sheet := file.Sheet[currency.Name]
+	if sheet == nil {
+		sheet, err = file.AddSheet(currency.Name)
+		if err != nil {
+			return err
+		}
+	}
 
 	row := sheet.AddRow()
 
@@ -243,6 +280,26 @@ func writeData(fileName string, currency string, data historicPriceData, average
 	return nil
 }
 
+func processCurrency(fileName string, currency Currency, startTime time.Time, endTime time.Time) error {
+	fmt.Println("Processing:", currency.Name)
+	fmt.Println("Starting from:", startTime.Format(dateFormat))
+	fmt.Println("Ending at:", endTime.Format(dateFormat))
+
+	fmt.Println()
+
+	data, err := getPriceData(currency, startTime, endTime)
+	if err != nil {
+		return err
+	}
+
+	err = writePriceData(fileName, currency, data)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "Cryptocurrencies Price Tracker"
@@ -259,11 +316,6 @@ func main() {
 			Name:  "end",
 			Value: "now",
 			Usage: `the end of the price calculation period (e.g., "2018-06-20"`,
-		},
-		cli.StringFlag{
-			Name:  "currency",
-			Value: "bitcoin",
-			Usage: `the name of the cryptocurrency to query"`,
 		},
 	}
 
@@ -292,15 +344,16 @@ func main() {
 			}
 		}
 
-		fmt.Println("Starting from:", startTime.Format(dateFormat))
-		fmt.Println("Ending at:", endTime.Format(dateFormat))
+		jsonFile, err := os.Open(configFileName)
+		if err != nil {
+			return err
+		}
+		defer jsonFile.Close()
 
-		currency := c.String("currency")
+		byteValue, _ := ioutil.ReadAll(jsonFile)
 
-		fmt.Println("Processing:", currency)
-		fmt.Println()
-
-		data, err := getPriceData(startTime, endTime, currency)
+		var currencies Currencies
+		err = json.Unmarshal(byteValue, &currencies)
 		if err != nil {
 			return err
 		}
@@ -311,9 +364,13 @@ func main() {
 		}
 		fileName += ".xlsx"
 
-		err = writePriceData(fileName, currency, data)
-		if err != nil {
-			return err
+		os.Remove(fileName)
+
+		for _, currency := range currencies.Currencies {
+			err := processCurrency(fileName, currency, startTime, endTime)
+			if err != nil {
+				return err
+			}
 		}
 
 		fmt.Println("Finished...")
