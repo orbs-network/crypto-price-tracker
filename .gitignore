@@ -13,3 +13,4 @@
 
 bin/
 *.xlsx
+config.json
