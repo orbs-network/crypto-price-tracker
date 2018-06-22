@@ -172,12 +172,9 @@ func writePriceData(fileName string, currency Currency, data []historicPriceData
 			average = 0
 		}
 
-		// Don't record extra days.
-		if j+1 > extraQueryDays {
-			err := writeData(fileName, currency, e, average)
-			if err != nil {
-				return err
-			}
+		err := writeData(fileName, currency, e, average)
+		if err != nil {
+			return err
 		}
 
 		if e.close > 0 {
