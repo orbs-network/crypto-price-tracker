@@ -22,7 +22,8 @@ import (
 const configFileName = "config.json"
 const dateFormat = "2006-01-02"
 const queryDateFormat = "20060102"
-const lastDaysAverageDurationDays = 15
+const averageDays = 15
+const extraQueryDays = averageDays + 1
 const cmcQueryURL = "https://coinmarketcap.com/currencies/%s/historical-data/"
 
 type Currency struct {
@@ -114,7 +115,7 @@ func getPriceData(currency Currency, startTime time.Time, endTime time.Time) ([]
 	}
 
 	query := queryURL.Query()
-	query.Set("start", startTime.Format(queryDateFormat))
+	query.Set("start", startTime.Add(-extraQueryDays*24*time.Hour).Format(queryDateFormat))
 	query.Set("end", endTime.Format(queryDateFormat))
 	queryURL.RawQuery = query.Encode()
 
@@ -137,8 +138,8 @@ func getPriceData(currency Currency, startTime time.Time, endTime time.Time) ([]
 
 	data := parseData(doc)
 
-	if len(data) < lastDaysAverageDurationDays {
-		return nil, fmt.Errorf("Not enough data point: %d", len(data))
+	if len(data) < averageDays {
+		return nil, fmt.Errorf("Not enough data points: %d", len(data))
 	}
 
 	return data, nil
@@ -151,7 +152,7 @@ func writePriceData(fileName string, currency Currency, data []historicPriceData
 	}
 
 	var average float64
-	ma := movingaverage.New(lastDaysAverageDurationDays)
+	ma := movingaverage.New(averageDays)
 
 	for i, j := len(data)-1, 0; i >= 0; i-- {
 		e := data[i]
@@ -164,21 +165,24 @@ func writePriceData(fileName string, currency Currency, data []historicPriceData
 			"market cap:", e.marketCap,
 		)
 
-		// If we have more than lastDaysAverageDurationDays left, then it'd be possible to calculate the average.
-		if j+1 > lastDaysAverageDurationDays {
+		// If we have more than averageDays left, then it'd be possible to calculate the average.
+		if j+1 > averageDays {
 			average = ma.Avg()
 		} else {
 			average = 0
 		}
 
-		if e.close > 0 {
-			j++
-			ma.Add(e.close)
+		// Don't record extra days.
+		if j+1 > extraQueryDays {
+			err := writeData(fileName, currency, e, average)
+			if err != nil {
+				return err
+			}
 		}
 
-		err := writeData(fileName, currency, e, average)
-		if err != nil {
-			return err
+		if e.close > 0 {
+			ma.Add(e.close)
+			j++
 		}
 	}
 
