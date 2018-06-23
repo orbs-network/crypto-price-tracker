@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tealeg/xlsx"
-
 	"github.com/PuerkitoBio/goquery"
 	"github.com/RobinUS2/golang-moving-average"
 	"github.com/urfave/cli"
@@ -26,17 +24,20 @@ const averageDays = 15
 const extraQueryDays = averageDays + 1
 const cmcQueryURL = "https://coinmarketcap.com/currencies/%s/historical-data/"
 
+// Currency is the specific cryptocurrency configuration in the config file.
 type Currency struct {
 	Name   string `json:"name"`
 	Symbol string `json:"symbol"`
 	Cmc    string `json:"cmc"`
 }
 
+// Currencies is the list of all currency configurations.
 type Currencies struct {
 	Currencies []Currency `json:"currencies"`
 }
 
-type historicPriceData struct {
+// HistoricPriceData is the cryptocurrency's historic price data at a specific point in time.
+type HistoricPriceData struct {
 	date      time.Time
 	open      float64
 	high      float64
@@ -46,8 +47,8 @@ type historicPriceData struct {
 	marketCap int64
 }
 
-func parseData(doc *goquery.Document) []historicPriceData {
-	var data []historicPriceData
+func parseData(doc *goquery.Document) []HistoricPriceData {
+	var data []HistoricPriceData
 	const selector = "#historical-data .table tbody tr"
 	const td = "td"
 	const cmcDateFormat = "Jan 2, 2006"
@@ -55,7 +56,7 @@ func parseData(doc *goquery.Document) []historicPriceData {
 	// Find the historical data items.
 	doc.Find(selector).Each(func(_ int, s *goquery.Selection) {
 		var err error
-		var dataElement historicPriceData
+		var dataElement HistoricPriceData
 
 		// For each item found, parse and get all the data
 		nodes := s.Find(td).Map(func(_ int, e *goquery.Selection) string {
@@ -108,7 +109,7 @@ func parseData(doc *goquery.Document) []historicPriceData {
 	return data
 }
 
-func getPriceData(currency Currency, startTime time.Time, endTime time.Time) ([]historicPriceData, error) {
+func getPriceData(currency Currency, startTime time.Time, endTime time.Time) ([]HistoricPriceData, error) {
 	queryURL, err := url.Parse(fmt.Sprintf(cmcQueryURL, currency.Cmc))
 	if err != nil {
 		return nil, err
@@ -145,8 +146,8 @@ func getPriceData(currency Currency, startTime time.Time, endTime time.Time) ([]
 	return data, nil
 }
 
-func writePriceData(fileName string, currency Currency, data []historicPriceData) error {
-	err := writeHeaders(fileName, currency)
+func writePriceData(report *Report, currency Currency, data []HistoricPriceData) error {
+	sheet, err := report.AddCurrency(currency)
 	if err != nil {
 		return err
 	}
@@ -172,7 +173,7 @@ func writePriceData(fileName string, currency Currency, data []historicPriceData
 			average = 0
 		}
 
-		err := writeData(fileName, currency, e, average)
+		err := sheet.AddData(e, average)
 		if err != nil {
 			return err
 		}
@@ -188,100 +189,7 @@ func writePriceData(fileName string, currency Currency, data []historicPriceData
 	return nil
 }
 
-func writeHeaders(fileName string, currency Currency) error {
-	file, err := xlsx.OpenFile(fileName)
-	if err != nil {
-		if os.IsNotExist(err) {
-			file = xlsx.NewFile()
-		} else {
-			return err
-		}
-	}
-	defer file.Save(fileName)
-
-	sheet, err := file.AddSheet(currency.Name)
-	if err != nil {
-		return err
-	}
-
-	row := sheet.AddRow()
-
-	cell := row.AddCell()
-	cell.SetValue("Date")
-
-	cell = row.AddCell()
-	cell.SetValue("Open")
-
-	cell = row.AddCell()
-	cell.SetValue("High")
-
-	cell = row.AddCell()
-	cell.SetValue("Low")
-
-	cell = row.AddCell()
-	cell.SetValue("Close")
-
-	cell = row.AddCell()
-	cell.SetValue("Volume")
-
-	cell = row.AddCell()
-	cell.SetValue("Market Cap")
-
-	cell = row.AddCell()
-	cell.SetValue("Average")
-
-	return nil
-}
-
-func writeData(fileName string, currency Currency, data historicPriceData, average float64) error {
-	file, err := xlsx.OpenFile(fileName)
-	if err != nil {
-		if os.IsNotExist(err) {
-			file = xlsx.NewFile()
-		} else {
-			return err
-		}
-	}
-	defer file.Save(fileName)
-
-	sheet := file.Sheet[currency.Name]
-	if sheet == nil {
-		sheet, err = file.AddSheet(currency.Name)
-		if err != nil {
-			return err
-		}
-	}
-
-	row := sheet.AddRow()
-
-	cell := row.AddCell()
-	cell.SetValue(data.date.Format(dateFormat))
-
-	cell = row.AddCell()
-	cell.SetValue(data.open)
-
-	cell = row.AddCell()
-	cell.SetValue(data.high)
-
-	cell = row.AddCell()
-	cell.SetValue(data.low)
-
-	cell = row.AddCell()
-	cell.SetValue(data.close)
-
-	cell = row.AddCell()
-	cell.SetValue(data.volume)
-
-	cell = row.AddCell()
-	cell.SetValue(data.marketCap)
-
-	cell = row.AddCell()
-	cell.SetValue(average)
-
-	return nil
-}
-
-func processCurrency(fileName string, currency Currency, startTime time.Time, endTime time.Time) error {
+func processCurrency(report *Report, currency Currency, startTime time.Time, endTime time.Time) error {
 	fmt.Println("Processing:", currency.Name)
 	fmt.Println("Starting from:", startTime.Format(dateFormat))
 	fmt.Println("Ending at:", endTime.Format(dateFormat))
@@ -293,7 +201,7 @@ func processCurrency(fileName string, currency Currency, startTime time.Time, en
 		return err
 	}
 
-	err = writePriceData(fileName, currency, data)
+	err = writePriceData(report, currency, data)
 	if err != nil {
 		return err
 	}
@@ -359,16 +267,13 @@ func main() {
 			return err
 		}
 
-		fileName := startTime.Format(dateFormat)
-		if startTime != endTime {
-			fileName += "_" + endTime.Format(dateFormat)
+		report, err := NewReport(startTime, endTime)
+		if err != nil {
+			return err
 		}
-		fileName += ".xlsx"
-
-		os.Remove(fileName)
 
 		for _, currency := range currencies.Currencies {
-			err := processCurrency(fileName, currency, startTime, endTime)
+			err := processCurrency(report, currency, startTime, endTime)
 			if err != nil {
 				return err
 			}
