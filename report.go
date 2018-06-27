@@ -2,8 +2,10 @@ package main
 
 import (
 	"os"
+	"path"
 	"time"
 
+	"github.com/kardianos/osext"
 	"github.com/tealeg/xlsx"
 )
 
@@ -19,19 +21,29 @@ type CurrencySheet struct {
 	report *Report
 }
 
-func getReportFileName(startTime time.Time, endTime time.Time) string {
+func getReportFileName(startTime time.Time, endTime time.Time) (string, error) {
 	fileName := startTime.Format(dateFormat)
 	if startTime != endTime {
 		fileName += "_" + endTime.Format(dateFormat)
 	}
 	fileName += ".xlsx"
 
-	return fileName
+	folderPath, err := osext.ExecutableFolder()
+	if err != nil {
+		return "", err
+	}
+
+	return path.Join(folderPath, fileName), nil
 }
 
 // DeleteReport deletes an existing report file.
 func DeleteReport(startTime time.Time, endTime time.Time) error {
-	err := os.Remove(getReportFileName(startTime, endTime))
+	fileName, err := getReportFileName(startTime, endTime)
+	if err != nil {
+		return err
+	}
+
+	err = os.Remove(fileName)
 	if os.IsNotExist(err) {
 		return nil
 	} else {
@@ -51,7 +63,10 @@ func NewReport(startTime time.Time, endTime time.Time) (*Report, error) {
 
 // OpenReport opens or creates new report file.
 func OpenReport(startTime time.Time, endTime time.Time) (*Report, error) {
-	fileName := getReportFileName(startTime, endTime)
+	fileName, err := getReportFileName(startTime, endTime)
+	if err != nil {
+		return nil, err
+	}
 
 	file, err := xlsx.OpenFile(fileName)
 	if err != nil {

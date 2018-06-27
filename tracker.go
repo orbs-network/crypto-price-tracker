@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/RobinUS2/golang-moving-average"
+	"github.com/kardianos/osext"
 	"github.com/urfave/cli"
 )
 
@@ -254,7 +256,12 @@ func main() {
 			}
 		}
 
-		jsonFile, err := os.Open(configFileName)
+		folderPath, err := osext.ExecutableFolder()
+		if err != nil {
+			return err
+		}
+
+		jsonFile, err := os.Open(path.Join(folderPath, configFileName))
 		if err != nil {
 			return err
 		}
