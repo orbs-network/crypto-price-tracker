@@ -144,34 +144,34 @@ func (s *CurrencySheet) Save() error {
 }
 
 // AddData adds a new data entry to the report.
-func (s *CurrencySheet) AddData(data HistoricPriceData, average float64) error {
+func (s *CurrencySheet) AddData(data FullHistoricPriceData) error {
 	defer s.Save()
 
 	row := s.sheet.AddRow()
 
 	cell := row.AddCell()
-	cell.SetValue(data.date.Format(dateFormat))
+	cell.SetValue(data.priceData.date.Format(dateFormat))
 
 	cell = row.AddCell()
-	cell.SetValue(data.open)
+	cell.SetValue(data.priceData.open)
 
 	cell = row.AddCell()
-	cell.SetValue(data.high)
+	cell.SetValue(data.priceData.high)
 
 	cell = row.AddCell()
-	cell.SetValue(data.low)
+	cell.SetValue(data.priceData.low)
 
 	cell = row.AddCell()
-	cell.SetValue(data.close)
+	cell.SetValue(data.priceData.close)
 
 	cell = row.AddCell()
-	cell.SetValue(data.volume)
+	cell.SetValue(data.priceData.volume)
 
 	cell = row.AddCell()
-	cell.SetValue(data.marketCap)
+	cell.SetValue(data.priceData.marketCap)
 
 	cell = row.AddCell()
-	cell.SetValue(average)
+	cell.SetValue(data.average)
 
 	return nil
 }

@@ -50,6 +50,12 @@ type HistoricPriceData struct {
 	marketCap int64
 }
 
+// FullHistoricPriceData includes HistoricPriceData as well as the last 15 days average of the closing price.
+type FullHistoricPriceData struct {
+	priceData HistoricPriceData
+	average   float64
+}
+
 func parseData(doc *goquery.Document) []HistoricPriceData {
 	var data []HistoricPriceData
 	const selector = "#historical-data .table tbody tr"
@@ -158,6 +164,8 @@ func writePriceData(report *Report, currency Currency, data []HistoricPriceData)
 	var average float64
 	ma := movingaverage.New(averageDays)
 
+	var fullPriceData []FullHistoricPriceData
+
 	for i, j := len(data)-1, 0; i >= 0; i-- {
 		e := data[i]
 		fmt.Println("Processing:", currency.Name, e.date.Format(dateFormat), "-",
@@ -176,14 +184,18 @@ func writePriceData(report *Report, currency Currency, data []HistoricPriceData)
 			average = 0
 		}
 
-		err := sheet.AddData(e, average)
-		if err != nil {
-			return err
-		}
+		fullPriceData = append(fullPriceData, FullHistoricPriceData{priceData: e, average: average})
 
 		if e.close > 0 {
 			ma.Add(e.close)
 			j++
+		}
+	}
+
+	for i := len(fullPriceData) - 1; i >= 0; i-- {
+		err := sheet.AddData(fullPriceData[i])
+		if err != nil {
+			return err
 		}
 	}
 
@@ -263,7 +275,10 @@ func main() {
 
 		jsonFile, err := os.Open(path.Join(folderPath, configFileName))
 		if err != nil {
-			return err
+			jsonFile, err = os.Open(path.Join(configFileName))
+			if err != nil {
+				return err
+			}
 		}
 		defer jsonFile.Close()
 
