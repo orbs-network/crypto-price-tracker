@@ -21,6 +21,7 @@ const configFileName = "config.json"
 const dateFormat = "2006-01-02"
 const queryDateFormat = "20060102"
 const averageDays = 15
+const defaultStartFromDays = 30
 const extraQueryDays = averageDays + 1
 const cmcQueryURL = "https://coinmarketcap.com/currencies/%s/historical-data/"
 
@@ -229,18 +230,6 @@ func main() {
 	}
 
 	app.Action = func(c *cli.Context) error {
-		var startTime time.Time
-		rawStartTime := c.String("start")
-		if rawStartTime == "now" {
-			startTime = time.Now().Local()
-		} else {
-			var err error
-			startTime, err = time.Parse(dateFormat, rawStartTime)
-			if err != nil {
-				return err
-			}
-		}
-
 		var endTime time.Time
 		rawEndTime := c.String("end")
 		if rawEndTime == "now" {
@@ -248,6 +237,18 @@ func main() {
 		} else {
 			var err error
 			endTime, err = time.Parse(dateFormat, rawEndTime)
+			if err != nil {
+				return err
+			}
+		}
+
+		var startTime time.Time
+		rawStartTime := c.String("start")
+		if rawStartTime == "now" {
+			startTime = endTime.Add(-defaultStartFromDays * 24 * time.Hour)
+		} else {
+			var err error
+			startTime, err = time.Parse(dateFormat, rawStartTime)
 			if err != nil {
 				return err
 			}
