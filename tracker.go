@@ -228,7 +228,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "Cryptocurrencies Price Tracker"
 	app.Usage = "track the last 15 days cryptocurrency's average price using CMC historic data web page scraper"
-	app.Version = "0.2.0"
+	app.Version = "0.3.0"
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
