@@ -102,6 +102,7 @@ func parseData(doc *goquery.Document) []*HistoricPriceData {
 			log.Fatal(err)
 		}
 
+		// If the value of the market cap field is "_" - treat it as 0.
 		marketCap := strings.Replace(nodes[6], ",", "", -1)
 		if marketCap == "-" {
 			dataElement.marketCap = 0.0
