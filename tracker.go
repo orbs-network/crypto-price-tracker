@@ -52,12 +52,12 @@ type HistoricPriceData struct {
 
 // FullHistoricPriceData includes HistoricPriceData as well as the last 15 days average of the closing price.
 type FullHistoricPriceData struct {
-	priceData HistoricPriceData
+	priceData *HistoricPriceData
 	average   float64
 }
 
-func parseData(doc *goquery.Document) []HistoricPriceData {
-	var data []HistoricPriceData
+func parseData(doc *goquery.Document) []*HistoricPriceData {
+	var data []*HistoricPriceData
 	const selector = "#historical-data .table tbody tr"
 	const td = "td"
 	const cmcDateFormat = "Jan 2, 2006"
@@ -112,14 +112,14 @@ func parseData(doc *goquery.Document) []HistoricPriceData {
 			}
 		}
 
-		data = append(data, dataElement)
+		data = append(data, &dataElement)
 	})
 
 	return data
 }
 
-func getPriceData(currency Currency, startTime time.Time, endTime time.Time) ([]HistoricPriceData, error) {
-	queryURL, err := url.Parse(fmt.Sprintf(cmcQueryURL, currency.Cmc))
+func getPriceData(currency *Currency, startTime *time.Time, endTime *time.Time) ([]*HistoricPriceData, error) {
+	queryURL, err := url.Parse(fmt.Sprintf(cmcQueryURL, currency.CMC))
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func getPriceData(currency Currency, startTime time.Time, endTime time.Time) ([]
 	return data, nil
 }
 
-func writePriceData(report *Report, currency Currency, data []HistoricPriceData) error {
+func writePriceData(report *Report, currency *Currency, data []*HistoricPriceData) error {
 	sheet, err := report.AddCurrency(currency)
 	if err != nil {
 		return err
@@ -193,7 +193,7 @@ func writePriceData(report *Report, currency Currency, data []HistoricPriceData)
 	}
 
 	for i := len(fullPriceData) - 1; i >= 0; i-- {
-		err := sheet.AddData(fullPriceData[i])
+		err := sheet.AddData(&fullPriceData[i])
 		if err != nil {
 			return err
 		}
@@ -204,7 +204,7 @@ func writePriceData(report *Report, currency Currency, data []HistoricPriceData)
 	return nil
 }
 
-func processCurrency(report *Report, currency Currency, startTime time.Time, endTime time.Time) error {
+func processCurrency(report *Report, currency *Currency, startTime *time.Time, endTime *time.Time) error {
 	fmt.Println("Processing:", currency.Name)
 	fmt.Println("Starting from:", startTime.Format(dateFormat))
 	fmt.Println("Ending at:", endTime.Format(dateFormat))
@@ -290,13 +290,13 @@ func main() {
 			return err
 		}
 
-		report, err := NewReport(startTime, endTime)
+		report, err := NewReport(&startTime, &endTime)
 		if err != nil {
 			return err
 		}
 
 		for _, currency := range currencies.Currencies {
-			err := processCurrency(report, currency, startTime, endTime)
+			err := processCurrency(report, &currency, &startTime, &endTime)
 			if err != nil {
 				return err
 			}
