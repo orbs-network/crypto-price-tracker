@@ -31,7 +31,7 @@ const cmcQueryURL = "https://coinmarketcap.com/currencies/%s/historical-data/"
 type Currency struct {
 	Name   string `json:"name"`
 	Symbol string `json:"symbol"`
-	Cmc    string `json:"cmc"`
+	CMC    string `json:"cmc"`
 }
 
 // Currencies is the list of all currency configurations.
