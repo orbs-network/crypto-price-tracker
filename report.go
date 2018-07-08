@@ -46,9 +46,9 @@ func DeleteReport(startTime *time.Time, endTime *time.Time) error {
 	err = os.Remove(fileName)
 	if os.IsNotExist(err) {
 		return nil
-	} else {
-		return err
 	}
+
+	return err
 }
 
 // NewReport create a new report file.
@@ -70,11 +70,11 @@ func OpenReport(startTime *time.Time, endTime *time.Time) (*Report, error) {
 
 	file, err := xlsx.OpenFile(fileName)
 	if err != nil {
-		if os.IsNotExist(err) {
-			file = xlsx.NewFile()
-		} else {
+		if !os.IsNotExist(err) {
 			return nil, err
 		}
+
+		file = xlsx.NewFile()
 	}
 	defer file.Save(fileName)
 
