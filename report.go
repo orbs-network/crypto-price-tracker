@@ -21,7 +21,7 @@ type CurrencySheet struct {
 	report *Report
 }
 
-func getReportFileName(startTime time.Time, endTime time.Time) (string, error) {
+func getReportFileName(startTime *time.Time, endTime *time.Time) (string, error) {
 	fileName := startTime.Format(dateFormat)
 	if startTime != endTime {
 		fileName += "_" + endTime.Format(dateFormat)
@@ -37,7 +37,7 @@ func getReportFileName(startTime time.Time, endTime time.Time) (string, error) {
 }
 
 // DeleteReport deletes an existing report file.
-func DeleteReport(startTime time.Time, endTime time.Time) error {
+func DeleteReport(startTime *time.Time, endTime *time.Time) error {
 	fileName, err := getReportFileName(startTime, endTime)
 	if err != nil {
 		return err
@@ -46,13 +46,13 @@ func DeleteReport(startTime time.Time, endTime time.Time) error {
 	err = os.Remove(fileName)
 	if os.IsNotExist(err) {
 		return nil
-	} else {
-		return err
 	}
+
+	return err
 }
 
 // NewReport create a new report file.
-func NewReport(startTime time.Time, endTime time.Time) (*Report, error) {
+func NewReport(startTime *time.Time, endTime *time.Time) (*Report, error) {
 	err := DeleteReport(startTime, endTime)
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func NewReport(startTime time.Time, endTime time.Time) (*Report, error) {
 }
 
 // OpenReport opens or creates new report file.
-func OpenReport(startTime time.Time, endTime time.Time) (*Report, error) {
+func OpenReport(startTime *time.Time, endTime *time.Time) (*Report, error) {
 	fileName, err := getReportFileName(startTime, endTime)
 	if err != nil {
 		return nil, err
@@ -70,11 +70,11 @@ func OpenReport(startTime time.Time, endTime time.Time) (*Report, error) {
 
 	file, err := xlsx.OpenFile(fileName)
 	if err != nil {
-		if os.IsNotExist(err) {
-			file = xlsx.NewFile()
-		} else {
+		if !os.IsNotExist(err) {
 			return nil, err
 		}
+
+		file = xlsx.NewFile()
 	}
 	defer file.Save(fileName)
 
@@ -90,7 +90,7 @@ func (r *Report) Save() error {
 }
 
 // AddCurrency adds a new currency sheet to the report.
-func (r *Report) AddCurrency(currency Currency) (*CurrencySheet, error) {
+func (r *Report) AddCurrency(currency *Currency) (*CurrencySheet, error) {
 	defer r.Save()
 
 	var err error
@@ -144,7 +144,7 @@ func (s *CurrencySheet) Save() error {
 }
 
 // AddData adds a new data entry to the report.
-func (s *CurrencySheet) AddData(data FullHistoricPriceData) error {
+func (s *CurrencySheet) AddData(data *FullHistoricPriceData) error {
 	defer s.Save()
 
 	row := s.sheet.AddRow()
