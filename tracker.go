@@ -22,7 +22,7 @@ import (
 const configFileName = "config.json"
 const dateFormat = "2006-01-02"
 const queryDateFormat = "20060102"
-const averageDays = 15
+const averageDays = 14
 const defaultStartFromDays = 31
 const extraQueryDays = averageDays + 1
 const cmcQueryURL = "https://coinmarketcap.com/currencies/%s/historical-data/"
