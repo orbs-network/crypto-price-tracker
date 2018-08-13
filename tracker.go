@@ -169,6 +169,7 @@ func writePriceData(report *Report, currency *Currency, data []*HistoricPriceDat
 
 	for i, j := len(data)-1, 0; i >= 0; i-- {
 		e := data[i]
+
 		fmt.Println("Processing:", currency.Name, e.date.Format(dateFormat), "-",
 			"open:", e.open, "USD",
 			"high:", e.high, "USD",
