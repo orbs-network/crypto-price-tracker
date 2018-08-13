@@ -179,19 +179,19 @@ func writePriceData(report *Report, currency *Currency, data []*HistoricPriceDat
 			"market cap:", e.marketCap,
 		)
 
+		if e.close > 0 {
+			ma.Add(e.close)
+			j++
+		}
+
 		// If we have more than averageDays left, then it'd be possible to calculate the average.
-		if j+1 > averageDays {
+		if j > averageDays {
 			average = ma.Avg()
 		} else {
 			average = 0
 		}
 
 		fullPriceData = append(fullPriceData, FullHistoricPriceData{priceData: e, average: average})
-
-		if e.close > 0 {
-			ma.Add(e.close)
-			j++
-		}
 	}
 
 	for i := len(fullPriceData) - 1; i >= 0; i-- {
