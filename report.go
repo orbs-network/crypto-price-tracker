@@ -130,6 +130,9 @@ func (r *Report) AddCurrency(currency *Currency) (*CurrencySheet, error) {
 		cell.SetValue("Market Cap")
 
 		cell = row.AddCell()
+		cell.SetValue("Daily Average")
+
+		cell = row.AddCell()
 		cell.SetValue(fmt.Sprintf("%d Days Average", AverageDays))
 	}
 
@@ -170,6 +173,9 @@ func (s *CurrencySheet) AddData(data *FullHistoricPriceData) error {
 
 	cell = row.AddCell()
 	cell.SetValue(data.priceData.marketCap)
+
+	cell = row.AddCell()
+	cell.SetValue((data.priceData.open + data.priceData.close) / 2)
 
 	cell = row.AddCell()
 	cell.SetValue(data.average)
