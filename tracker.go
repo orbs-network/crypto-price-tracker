@@ -19,12 +19,14 @@ import (
 	"github.com/urfave/cli"
 )
 
+// AverageDays is the number of days to take, when calculating the average price.
+const AverageDays = 14
+
 const configFileName = "config.json"
 const dateFormat = "2006-01-02"
 const queryDateFormat = "20060102"
-const averageDays = 14
 const defaultStartFromDays = 31
-const extraQueryDays = averageDays + 1
+const extraQueryDays = AverageDays + 1
 const cmcQueryURL = "https://coinmarketcap.com/currencies/%s/historical-data/"
 
 // Currency is the specific cryptocurrency configuration in the config file.
@@ -50,7 +52,7 @@ type HistoricPriceData struct {
 	marketCap int64
 }
 
-// FullHistoricPriceData includes HistoricPriceData as well as the last 15 days average of the closing price.
+// FullHistoricPriceData includes HistoricPriceData as well as the last AverageDays const AverageDays = 14.
 type FullHistoricPriceData struct {
 	priceData *HistoricPriceData
 	average   float64
@@ -149,7 +151,7 @@ func getPriceData(currency *Currency, startTime *time.Time, endTime *time.Time) 
 
 	data := parseData(doc)
 
-	if len(data) < averageDays {
+	if len(data) < AverageDays {
 		return nil, fmt.Errorf("Not enough data points: %d", len(data))
 	}
 
@@ -163,7 +165,7 @@ func writePriceData(report *Report, currency *Currency, data []*HistoricPriceDat
 	}
 
 	var average float64
-	ma := movingaverage.New(averageDays)
+	ma := movingaverage.New(AverageDays)
 
 	var fullPriceData []FullHistoricPriceData
 
@@ -185,7 +187,7 @@ func writePriceData(report *Report, currency *Currency, data []*HistoricPriceDat
 		}
 
 		// If we have more than averageDays left, then it'd be possible to calculate the average.
-		if j > averageDays {
+		if j > AverageDays {
 			average = ma.Avg()
 		} else {
 			average = 0
@@ -229,7 +231,7 @@ func processCurrency(report *Report, currency *Currency, startTime *time.Time, e
 func main() {
 	app := cli.NewApp()
 	app.Name = "Cryptocurrencies Price Tracker"
-	app.Usage = "track the last 15 days cryptocurrency's average price using CMC historic data web page scraper"
+	app.Usage = fmt.Sprintf("track the last %d days cryptocurrency's average price using CMC historic data web page scraper", AverageDays)
 	app.Version = "0.6.0"
 
 	app.Flags = []cli.Flag{
