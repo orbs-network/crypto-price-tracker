@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"time"
@@ -129,7 +130,7 @@ func (r *Report) AddCurrency(currency *Currency) (*CurrencySheet, error) {
 		cell.SetValue("Market Cap")
 
 		cell = row.AddCell()
-		cell.SetValue("Average")
+		cell.SetValue(fmt.Sprintf("%d Days Average", AverageDays))
 	}
 
 	return &CurrencySheet{
