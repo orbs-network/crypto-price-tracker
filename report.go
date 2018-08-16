@@ -10,6 +10,27 @@ import (
 	"github.com/tealeg/xlsx"
 )
 
+// Header is the column meta-data.
+type Header struct {
+	Name string
+	Wide bool
+}
+
+var headers = [...]Header{
+	{Name: "Date"},
+	{Name: "Open"},
+	{Name: "High"},
+	{Name: "Low"},
+	{Name: "Close"},
+	{Name: "Volume", Wide: true},
+	{Name: "Market Cap", Wide: true},
+	{Name: "Daily Average"},
+	{Name: fmt.Sprintf("%d Days Average", AverageDays)},
+}
+
+const longNumFormat = "#,##0"
+const longColumnWidth = 20
+
 // Report is is a high level structure providing price report management.
 type Report struct {
 	file     *xlsx.File
@@ -108,32 +129,17 @@ func (r *Report) AddCurrency(currency *Currency) (*CurrencySheet, error) {
 	if newSheet {
 		row := sheet.AddRow()
 
-		cell := row.AddCell()
-		cell.SetValue("Date")
+		for i, header := range headers {
+			cell := row.AddCell()
+			cell.SetValue(header.Name)
 
-		cell = row.AddCell()
-		cell.SetValue("Open")
-
-		cell = row.AddCell()
-		cell.SetValue("High")
-
-		cell = row.AddCell()
-		cell.SetValue("Low")
-
-		cell = row.AddCell()
-		cell.SetValue("Close")
-
-		cell = row.AddCell()
-		cell.SetValue("Volume")
-
-		cell = row.AddCell()
-		cell.SetValue("Market Cap")
-
-		cell = row.AddCell()
-		cell.SetValue("Daily Average")
-
-		cell = row.AddCell()
-		cell.SetValue(fmt.Sprintf("%d Days Average", AverageDays))
+			if header.Wide {
+				err := sheet.SetColWidth(i, i, longColumnWidth)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
 
 	return &CurrencySheet{
@@ -170,9 +176,11 @@ func (s *CurrencySheet) AddData(data *FullHistoricPriceData) error {
 
 	cell = row.AddCell()
 	cell.SetValue(data.priceData.volume)
+	cell.NumFmt = longNumFormat
 
 	cell = row.AddCell()
 	cell.SetValue(data.priceData.marketCap)
+	cell.NumFmt = longNumFormat
 
 	cell = row.AddCell()
 	cell.SetValue((data.priceData.open + data.priceData.close) / 2)
