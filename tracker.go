@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/RobinUS2/golang-moving-average"
+	movingaverage "github.com/RobinUS2/golang-moving-average"
 	"github.com/kardianos/osext"
 	"github.com/urfave/cli"
 )
@@ -48,7 +48,7 @@ type HistoricPriceData struct {
 	high      float64
 	low       float64
 	close     float64
-	volume    int64
+	volume    float64
 	marketCap int64
 }
 
@@ -60,7 +60,7 @@ type FullHistoricPriceData struct {
 
 func parseData(doc *goquery.Document) []*HistoricPriceData {
 	var data []*HistoricPriceData
-	const selector = "#historical-data .table tbody tr"
+	const selector = ".cmc-tab-historical-data .cmc-table tbody tr"
 	const td = "td"
 	const cmcDateFormat = "Jan 2, 2006"
 
@@ -99,7 +99,7 @@ func parseData(doc *goquery.Document) []*HistoricPriceData {
 			log.Fatal(err)
 		}
 
-		dataElement.volume, err = strconv.ParseInt(strings.Replace(nodes[5], ",", "", -1), 10, 64)
+		dataElement.volume, err = strconv.ParseFloat(strings.Replace(nodes[5], ",", "", -1), 64)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -232,7 +232,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "Cryptocurrencies Price Tracker"
 	app.Usage = fmt.Sprintf("track the last %d days cryptocurrency's average price using CMC historic data web page scraper", AverageDays)
-	app.Version = "0.7.0"
+	app.Version = "0.8.0"
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
