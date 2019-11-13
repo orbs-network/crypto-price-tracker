@@ -79,22 +79,22 @@ func parseData(doc *goquery.Document) []*HistoricPriceData {
 			log.Fatal(err)
 		}
 
-		dataElement.open, err = strconv.ParseFloat(nodes[1], 64)
+		dataElement.open, err = strconv.ParseFloat(strings.Replace(nodes[1], ",", "", -1), 64)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		dataElement.high, err = strconv.ParseFloat(nodes[2], 64)
+		dataElement.high, err = strconv.ParseFloat(strings.Replace(nodes[2], ",", "", -1), 64)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		dataElement.low, err = strconv.ParseFloat(nodes[3], 64)
+		dataElement.low, err = strconv.ParseFloat(strings.Replace(nodes[3], ",", "", -1), 64)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		dataElement.close, err = strconv.ParseFloat(nodes[4], 64)
+		dataElement.close, err = strconv.ParseFloat(strings.Replace(nodes[4], ",", "", -1), 64)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -232,7 +232,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "Cryptocurrencies Price Tracker"
 	app.Usage = fmt.Sprintf("track the last %d days cryptocurrency's average price using CMC historic data web page scraper", AverageDays)
-	app.Version = "0.8.0"
+	app.Version = "0.9.0"
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
