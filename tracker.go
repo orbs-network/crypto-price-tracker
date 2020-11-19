@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -9,11 +10,8 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	movingaverage "github.com/RobinUS2/golang-moving-average"
 	"github.com/kardianos/osext"
 	"github.com/urfave/cli"
@@ -34,6 +32,7 @@ type Currency struct {
 	Name   string `json:"name"`
 	Symbol string `json:"symbol"`
 	CMC    string `json:"cmc"`
+	CMCId  string `json:"cmc_id"`
 }
 
 // Currencies is the list of all currency configurations.
@@ -58,65 +57,29 @@ type FullHistoricPriceData struct {
 	average   float64
 }
 
-func parseData(doc *goquery.Document) []*HistoricPriceData {
+func parseData(quotes []interface{}) []*HistoricPriceData {
 	var data []*HistoricPriceData
-	const selector = ".cmc-tab-historical-data .cmc-table tbody tr"
-	const td = "td"
-	const cmcDateFormat = "Jan 2, 2006"
+	var err error
+	const cmcDateFormat = "2006-01-02T15:04:05.000Z"
 
-	// Find the historical data items.
-	doc.Find(selector).Each(func(_ int, s *goquery.Selection) {
-		var err error
+	for i := 0; i < len(quotes); i++ {
+		aQuote := quotes[i].(map[string]interface{})
+		p2 := aQuote["quote"].(map[string]interface{})
+		currQuote := p2["USD"].(map[string]interface{})
 		var dataElement HistoricPriceData
-
-		// For each item found, parse and get all the data
-		nodes := s.Find(td).Map(func(_ int, e *goquery.Selection) string {
-			return e.Text()
-		})
-
-		dataElement.date, err = time.Parse(cmcDateFormat, nodes[0])
+		dataElement.date, err = time.Parse(cmcDateFormat, currQuote["timestamp"].(string))
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		dataElement.open, err = strconv.ParseFloat(strings.Replace(nodes[1], ",", "", -1), 64)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		dataElement.high, err = strconv.ParseFloat(strings.Replace(nodes[2], ",", "", -1), 64)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		dataElement.low, err = strconv.ParseFloat(strings.Replace(nodes[3], ",", "", -1), 64)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		dataElement.close, err = strconv.ParseFloat(strings.Replace(nodes[4], ",", "", -1), 64)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		dataElement.volume, err = strconv.ParseFloat(strings.Replace(nodes[5], ",", "", -1), 64)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// If the value of the market cap field is "_" - treat it as 0.
-		marketCap := strings.Replace(nodes[6], ",", "", -1)
-		if marketCap == "-" {
-			dataElement.marketCap = 0.0
-		} else {
-			dataElement.marketCap, err = strconv.ParseInt(strings.Replace(nodes[6], ",", "", -1), 10, 64)
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
+		dataElement.open = currQuote["open"].(float64)
+		dataElement.high = currQuote["high"].(float64)
+		dataElement.low = currQuote["low"].(float64)
+		dataElement.close = currQuote["close"].(float64)
+		dataElement.volume = currQuote["volume"].(float64)
+		dataElement.marketCap = int64(currQuote["market_cap"].(float64))
 
 		data = append(data, &dataElement)
-	})
+	}
 
 	return data
 }
@@ -132,7 +95,7 @@ func getPriceData(currency *Currency, startTime *time.Time, endTime *time.Time) 
 	query.Set("end", endTime.Format(queryDateFormat))
 	queryURL.RawQuery = query.Encode()
 
-	// Request the HTML page.
+	//Request the HTML page.
 	res, err := http.Get(queryURL.String())
 	if err != nil {
 		return nil, err
@@ -143,13 +106,29 @@ func getPriceData(currency *Currency, startTime *time.Time, endTime *time.Time) 
 		return nil, fmt.Errorf("status code error: %d %s", res.StatusCode, res.Status)
 	}
 
-	// Load the HTML document
-	doc, err := goquery.NewDocumentFromReader(res.Body)
+	byteValue, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	data := parseData(doc)
+	startTagBytes := []byte("<script id=\"__NEXT_DATA__\" type=\"application/json\">")
+	byteValue = byteValue[bytes.Index(byteValue, startTagBytes)+len(startTagBytes):]
+	byteValue = byteValue[:bytes.Index(byteValue, []byte("</script>"))]
+
+	var p map[string]interface{}
+	err = json.Unmarshal(byteValue, &p)
+	if err != nil {
+		return nil, err
+	}
+
+	p2 := p["props"].(map[string]interface{})
+	p3 := p2["initialState"].(map[string]interface{})
+	p4 := p3["cryptocurrency"].(map[string]interface{})
+	p5 := p4["ohlcvHistorical"].(map[string]interface{})
+	p6 := p5[currency.CMCId].(map[string]interface{})
+	quotes := p6["quotes"].([]interface{})
+
+	data := parseData(quotes)
 
 	if len(data) < AverageDays {
 		return nil, fmt.Errorf("Not enough data points: %d", len(data))
