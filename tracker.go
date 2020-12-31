@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -25,7 +24,7 @@ const dateFormat = "2006-01-02"
 const queryDateFormat = "20060102"
 const defaultStartFromDays = 31
 const extraQueryDays = AverageDays + 1
-const cmcQueryURL = "https://coinmarketcap.com/currencies/%s/historical-data/"
+const cmcQueryURL = "https://web-api.coinmarketcap.com/v1/cryptocurrency/ohlcv/historical"
 
 // Currency is the specific cryptocurrency configuration in the config file.
 type Currency struct {
@@ -85,14 +84,16 @@ func parseData(quotes []interface{}) []*HistoricPriceData {
 }
 
 func getPriceData(currency *Currency, startTime *time.Time, endTime *time.Time) ([]*HistoricPriceData, error) {
-	queryURL, err := url.Parse(fmt.Sprintf(cmcQueryURL, currency.CMC))
+	queryURL, err := url.Parse(cmcQueryURL)
 	if err != nil {
 		return nil, err
 	}
 
 	query := queryURL.Query()
-	query.Set("start", startTime.Add(-extraQueryDays*24*time.Hour).Format(queryDateFormat))
-	query.Set("end", endTime.Format(queryDateFormat))
+	query.Set("id", currency.CMCId)
+	query.Set("convert", "USD")
+	query.Set("time_start", fmt.Sprintf("%d", startTime.Add(-extraQueryDays*24*time.Hour).Unix()))
+	query.Set("time_end", fmt.Sprintf("%d", endTime.Unix()))
 	queryURL.RawQuery = query.Encode()
 
 	//Request the HTML page.
@@ -111,22 +112,14 @@ func getPriceData(currency *Currency, startTime *time.Time, endTime *time.Time) 
 		return nil, err
 	}
 
-	startTagBytes := []byte("<script id=\"__NEXT_DATA__\" type=\"application/json\">")
-	byteValue = byteValue[bytes.Index(byteValue, startTagBytes)+len(startTagBytes):]
-	byteValue = byteValue[:bytes.Index(byteValue, []byte("</script>"))]
-
 	var p map[string]interface{}
 	err = json.Unmarshal(byteValue, &p)
 	if err != nil {
 		return nil, err
 	}
 
-	p2 := p["props"].(map[string]interface{})
-	p3 := p2["initialState"].(map[string]interface{})
-	p4 := p3["cryptocurrency"].(map[string]interface{})
-	p5 := p4["ohlcvHistorical"].(map[string]interface{})
-	p6 := p5[currency.CMCId].(map[string]interface{})
-	quotes := p6["quotes"].([]interface{})
+	p2 := p["data"].(map[string]interface{})
+	quotes := p2["quotes"].([]interface{})
 
 	data := parseData(quotes)
 
