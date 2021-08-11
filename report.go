@@ -2,8 +2,12 @@ package main
 
 import (
 	"fmt"
+	"github.com/kardianos/osext"
 	"github.com/tealeg/xlsx"
 	"os"
+	"path"
+	"strconv"
+	"time"
 )
 
 // Header is the column meta-data.
@@ -34,7 +38,6 @@ var headers = [...]Header{
 
 const longNumFormat = "#,##0"
 const longColumnWidth = 20
-const fileName = "Crypto-HistoricalPrice.xlsx"
 
 // Report is is a high level structure providing price report management.
 type Report struct {
@@ -48,8 +51,23 @@ type CurrencySheet struct {
 	report *Report
 }
 
+func generateReportForDeltaFileName(startTime *time.Time, endTime *time.Time) (string, error) {
+	fileName := startTime.Format(dateFormat)
+	if startTime != endTime {
+		fileName += "_" + endTime.Format(dateFormat)
+	}
+	fileName += ".xlsx"
+
+	folderPath, err := osext.ExecutableFolder()
+	if err != nil {
+		return "", err
+	}
+
+	return path.Join(folderPath, fileName), nil
+}
+
 // OpenReport opens or creates new report file.
-func OpenReport() (*Report, error) {
+func OpenReport(fileName string) (*Report, error) {
 
 	file, err := xlsx.OpenFile(fileName)
 	if err != nil {
@@ -154,13 +172,13 @@ func (s *CurrencySheet) AddData(data *FullHistoricPriceData) error {
 	cell.SetValue(data.average)
 
 	cell = row.AddCell()
-	cell.SetValue(data.priceData.date.Day())
+	cell.SetValue(dateIntToString(data.priceData.date.Day()))
 
 	cell = row.AddCell()
-	cell.SetValue(int(data.priceData.date.Month()))
+	cell.SetValue(dateIntToString(int(data.priceData.date.Month())))
 
 	cell = row.AddCell()
-	cell.SetValue(data.priceData.date.Year())
+	cell.SetValue(dateIntToString(data.priceData.date.Year()))
 
 	cell = row.AddCell()
 	cell.SetValue(dailyAverage)
@@ -170,12 +188,23 @@ func (s *CurrencySheet) AddData(data *FullHistoricPriceData) error {
 
 	cell = row.AddCell()
 	cell.SetValue(data.priceData.date.Format(priorityDateFormat))
-
 	cell = row.AddCell()
-	cell.SetValue(data.shekelUsdRatio * dailyAverage)
+	cell.SetFloat(data.shekelUsdRatio * dailyAverage)
 
 	cell = row.AddCell()
 	cell.SetValue(Version)
 
 	return nil
+}
+
+func dateIntToString(value int) string {
+
+	stringValue := strconv.Itoa(value)
+
+	if len(stringValue) == 1 {
+		return "0" + stringValue
+	}
+
+	return stringValue
+
 }
