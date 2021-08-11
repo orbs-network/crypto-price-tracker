@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -17,14 +18,20 @@ import (
 )
 
 // AverageDays is the number of days to take, when calculating the average price.
+const Version = "1.0.0"
 const AverageDays = 14
 
 const configFileName = "config.json"
 const dateFormat = "2006-01-02"
-const queryDateFormat = "20060102"
+const priorityDateFormat = "02/01/06"
+const bankOfIsraelDateFormat = "20060102"
+
 const defaultStartFromDays = 31
 const extraQueryDays = AverageDays + 1
 const cmcQueryURL = "https://web-api.coinmarketcap.com/v1/cryptocurrency/ohlcv/historical"
+const israeliBankURL = "https://www.boi.org.il/currency.xml"
+
+var shekelUsdRatioCache = make(map[string]float64)
 
 // Currency is the specific cryptocurrency configuration in the config file.
 type Currency struct {
@@ -52,8 +59,9 @@ type HistoricPriceData struct {
 
 // FullHistoricPriceData includes HistoricPriceData as well as the last AverageDays const AverageDays = 14.
 type FullHistoricPriceData struct {
-	priceData *HistoricPriceData
-	average   float64
+	priceData      *HistoricPriceData
+	average        float64
+	shekelUsdRatio float64
 }
 
 func parseData(quotes []interface{}) []*HistoricPriceData {
@@ -83,8 +91,92 @@ func parseData(quotes []interface{}) []*HistoricPriceData {
 	return data
 }
 
+func getShekelConversionRatio(date time.Time) (shekelDollarRatio float64, err error) {
+
+	formattedDate := date.Format(bankOfIsraelDateFormat)
+
+	shekelUsdRatio, exists := shekelUsdRatioCache[formattedDate]
+
+	if !exists {
+
+		shekelUsdRatio, err = getFromIsraelBank(date, 20)
+		if err != nil {
+			return 0, err
+		}
+
+		shekelUsdRatioCache[formattedDate] = shekelUsdRatio
+
+	}
+
+	return shekelUsdRatio, nil
+
+}
+
+func getFromIsraelBank(date time.Time, retries int) (float64, error) {
+
+	if retries < 1 {
+		panic("Cannot fetch Shekel USD values from BankOfIsrael")
+	}
+
+	israelBankQueryURL, err := url.Parse(israeliBankURL)
+
+	if err != nil {
+		return 0, err
+	}
+
+	israelBankQuery := israelBankQueryURL.Query()
+
+	israelBankQuery.Set("curr", "01")
+	israelBankQuery.Set("rdate", date.Format(bankOfIsraelDateFormat))
+
+	israelBankQueryURL.RawQuery = israelBankQuery.Encode()
+
+	res, err := http.Get(israelBankQueryURL.String())
+	if err != nil {
+		return 0, err
+	}
+
+	if res.StatusCode != 200 {
+		return 0, fmt.Errorf("status code error: %d %s", res.StatusCode, res.Status)
+	}
+
+	byteValue, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return 0, err
+	}
+
+	var p struct {
+		CURRENCY struct {
+			RATE float64
+			UNIT uint
+		}
+	}
+
+	xml.Unmarshal(byteValue, &p)
+
+	currency := p.CURRENCY
+
+	if currency.UNIT > 1 {
+		return 0, fmt.Errorf("getShekelConversionRatio: Wrong returned unit number %v", currency.UNIT)
+	}
+
+	if currency.RATE == 0 {
+
+		return getFromIsraelBank(
+			date.AddDate(0, 0, -1),
+			retries-1,
+		)
+
+	}
+
+	return currency.RATE, nil
+
+}
+
 func getPriceData(currency *Currency, startTime *time.Time, endTime *time.Time) ([]*HistoricPriceData, error) {
+
 	queryURL, err := url.Parse(cmcQueryURL)
+
 	if err != nil {
 		return nil, err
 	}
@@ -144,6 +236,11 @@ func writePriceData(report *Report, currency *Currency, data []*HistoricPriceDat
 	for i, j := len(data)-1, 0; i >= 0; i-- {
 		e := data[i]
 
+		shekelUsdRatio, err := getShekelConversionRatio(e.date)
+		if err != nil {
+			return err
+		}
+
 		fmt.Println("Processing:", currency.Name, e.date.Format(dateFormat), "-",
 			"open:", e.open, "USD",
 			"high:", e.high, "USD",
@@ -151,6 +248,7 @@ func writePriceData(report *Report, currency *Currency, data []*HistoricPriceDat
 			"close:", e.close, "USD",
 			"volume:", e.volume,
 			"market cap:", e.marketCap,
+			"shekelUsdRatio:", shekelUsdRatio,
 		)
 
 		if e.close > 0 {
@@ -165,14 +263,40 @@ func writePriceData(report *Report, currency *Currency, data []*HistoricPriceDat
 			average = 0
 		}
 
-		fullPriceData = append(fullPriceData, FullHistoricPriceData{priceData: e, average: average})
+		fullPriceData = append(fullPriceData, FullHistoricPriceData{priceData: e, average: average, shekelUsdRatio: shekelUsdRatio})
 	}
 
 	for i := len(fullPriceData) - 1; i >= 0; i-- {
-		err := sheet.AddData(&fullPriceData[i])
-		if err != nil {
-			return err
+
+		priceData := &fullPriceData[i]
+
+		exist := false
+
+		// check if exist
+		for _, row := range sheet.sheet.Rows {
+
+			if row.Cells[0].Value == priceData.priceData.date.Format(dateFormat) {
+				exist = true
+				break
+			}
+
 		}
+
+		if !exist {
+
+			err := sheet.AddData(priceData)
+
+			if err != nil {
+				return err
+			}
+
+		} else {
+
+			// todo: verify new row matches existing row
+			fmt.Println(fmt.Sprintf("skipping existing row for date: %s", priceData.priceData.date))
+
+		}
+
 	}
 
 	fmt.Println()
@@ -181,6 +305,7 @@ func writePriceData(report *Report, currency *Currency, data []*HistoricPriceDat
 }
 
 func processCurrency(report *Report, currency *Currency, startTime *time.Time, endTime *time.Time) error {
+
 	fmt.Println("Processing:", currency.Name)
 	fmt.Println("Starting from:", startTime.Format(dateFormat))
 	fmt.Println("Ending at:", endTime.Format(dateFormat))
@@ -188,6 +313,7 @@ func processCurrency(report *Report, currency *Currency, startTime *time.Time, e
 	fmt.Println()
 
 	data, err := getPriceData(currency, startTime, endTime)
+
 	if err != nil {
 		return err
 	}
@@ -201,6 +327,7 @@ func processCurrency(report *Report, currency *Currency, startTime *time.Time, e
 }
 
 func main() {
+
 	app := cli.NewApp()
 	app.Name = "Cryptocurrencies Price Tracker"
 	app.Usage = fmt.Sprintf("track the last %d days cryptocurrency's average price using CMC historic data web page scraper", AverageDays)
@@ -266,7 +393,8 @@ func main() {
 			return err
 		}
 
-		report, err := NewReport(&startTime, &endTime)
+		report, err := OpenReport()
+
 		if err != nil {
 			return err
 		}

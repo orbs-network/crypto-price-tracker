@@ -2,12 +2,8 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path"
-	"time"
-
-	"github.com/kardianos/osext"
 	"github.com/tealeg/xlsx"
+	"os"
 )
 
 // Header is the column meta-data.
@@ -26,10 +22,19 @@ var headers = [...]Header{
 	{Name: "Market Cap", Wide: true},
 	{Name: "Daily Average"},
 	{Name: fmt.Sprintf("%d Days Average", AverageDays)},
+	{Name: "Year"},
+	{Name: "Month"},
+	{Name: "Day"},
+	{Name: "Average USD"},
+	{Name: "Dollar rate"},
+	{Name: "Date"},
+	{Name: "Average ILS"},
+	{Name: "Importer version"},
 }
 
 const longNumFormat = "#,##0"
 const longColumnWidth = 20
+const fileName = "Crypto-HistoricalPrice.xlsx"
 
 // Report is is a high level structure providing price report management.
 type Report struct {
@@ -43,52 +48,8 @@ type CurrencySheet struct {
 	report *Report
 }
 
-func getReportFileName(startTime *time.Time, endTime *time.Time) (string, error) {
-	fileName := startTime.Format(dateFormat)
-	if startTime != endTime {
-		fileName += "_" + endTime.Format(dateFormat)
-	}
-	fileName += ".xlsx"
-
-	folderPath, err := osext.ExecutableFolder()
-	if err != nil {
-		return "", err
-	}
-
-	return path.Join(folderPath, fileName), nil
-}
-
-// DeleteReport deletes an existing report file.
-func DeleteReport(startTime *time.Time, endTime *time.Time) error {
-	fileName, err := getReportFileName(startTime, endTime)
-	if err != nil {
-		return err
-	}
-
-	err = os.Remove(fileName)
-	if os.IsNotExist(err) {
-		return nil
-	}
-
-	return err
-}
-
-// NewReport create a new report file.
-func NewReport(startTime *time.Time, endTime *time.Time) (*Report, error) {
-	err := DeleteReport(startTime, endTime)
-	if err != nil {
-		return nil, err
-	}
-
-	return OpenReport(startTime, endTime)
-}
-
 // OpenReport opens or creates new report file.
-func OpenReport(startTime *time.Time, endTime *time.Time) (*Report, error) {
-	fileName, err := getReportFileName(startTime, endTime)
-	if err != nil {
-		return nil, err
-	}
+func OpenReport() (*Report, error) {
 
 	file, err := xlsx.OpenFile(fileName)
 	if err != nil {
@@ -98,6 +59,7 @@ func OpenReport(startTime *time.Time, endTime *time.Time) (*Report, error) {
 
 		file = xlsx.NewFile()
 	}
+
 	defer file.Save(fileName)
 
 	return &Report{
@@ -130,6 +92,7 @@ func (r *Report) AddCurrency(currency *Currency) (*CurrencySheet, error) {
 		row := sheet.AddRow()
 
 		for i, header := range headers {
+
 			cell := row.AddCell()
 			cell.SetValue(header.Name)
 
@@ -182,11 +145,37 @@ func (s *CurrencySheet) AddData(data *FullHistoricPriceData) error {
 	cell.SetValue(data.priceData.marketCap)
 	cell.NumFmt = longNumFormat
 
+	dailyAverage := (data.priceData.open + data.priceData.close) / 2
+
 	cell = row.AddCell()
-	cell.SetValue((data.priceData.open + data.priceData.close) / 2)
+	cell.SetValue(dailyAverage)
 
 	cell = row.AddCell()
 	cell.SetValue(data.average)
+
+	cell = row.AddCell()
+	cell.SetValue(data.priceData.date.Day())
+
+	cell = row.AddCell()
+	cell.SetValue(int(data.priceData.date.Month()))
+
+	cell = row.AddCell()
+	cell.SetValue(data.priceData.date.Year())
+
+	cell = row.AddCell()
+	cell.SetValue(dailyAverage)
+
+	cell = row.AddCell()
+	cell.SetValue(data.shekelUsdRatio)
+
+	cell = row.AddCell()
+	cell.SetValue(data.priceData.date.Format(priorityDateFormat))
+
+	cell = row.AddCell()
+	cell.SetValue(data.shekelUsdRatio * dailyAverage)
+
+	cell = row.AddCell()
+	cell.SetValue(Version)
 
 	return nil
 }
