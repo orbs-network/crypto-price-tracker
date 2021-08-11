@@ -222,8 +222,12 @@ func getPriceData(currency *Currency, startTime *time.Time, endTime *time.Time) 
 	return data, nil
 }
 
-func writePriceData(report *Report, currency *Currency, data []*HistoricPriceData) error {
+func writePriceData(report *Report, currency *Currency, data []*HistoricPriceData, report_forDelta *Report) error {
+
 	sheet, err := report.AddCurrency(currency)
+
+	sheet_forDelta, err := report_forDelta.AddCurrency(currency)
+
 	if err != nil {
 		return err
 	}
@@ -290,6 +294,12 @@ func writePriceData(report *Report, currency *Currency, data []*HistoricPriceDat
 				return err
 			}
 
+			err = sheet_forDelta.AddData(priceData)
+
+			if err != nil {
+				return err
+			}
+
 		} else {
 
 			// todo: verify new row matches existing row
@@ -304,7 +314,7 @@ func writePriceData(report *Report, currency *Currency, data []*HistoricPriceDat
 	return nil
 }
 
-func processCurrency(report *Report, currency *Currency, startTime *time.Time, endTime *time.Time) error {
+func processCurrency(report *Report, currency *Currency, startTime *time.Time, endTime *time.Time, report_forDelta *Report, ) error {
 
 	fmt.Println("Processing:", currency.Name)
 	fmt.Println("Starting from:", startTime.Format(dateFormat))
@@ -318,7 +328,7 @@ func processCurrency(report *Report, currency *Currency, startTime *time.Time, e
 		return err
 	}
 
-	err = writePriceData(report, currency, data)
+	err = writePriceData(report, currency, data, report_forDelta)
 	if err != nil {
 		return err
 	}
@@ -393,14 +403,28 @@ func main() {
 			return err
 		}
 
-		report, err := OpenReport()
+		report, err := OpenReport("Crypto-HistoricalPrice.xlsx")
+
+		if err != nil {
+			return err
+		}
+
+		name, err := generateReportForDeltaFileName(&startTime, &endTime)
+
+		if err != nil {
+			return err
+		}
+
+		report_forDelta, err := OpenReport(
+			name,
+		)
 
 		if err != nil {
 			return err
 		}
 
 		for _, currency := range currencies.Currencies {
-			err := processCurrency(report, &currency, &startTime, &endTime)
+			err := processCurrency(report, &currency, &startTime, &endTime, report_forDelta)
 			if err != nil {
 				return err
 			}
