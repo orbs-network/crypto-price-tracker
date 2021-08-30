@@ -1,9 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	movingaverage "github.com/RobinUS2/golang-moving-average"
+	"github.com/kardianos/osext"
+	"github.com/urfave/cli"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -11,14 +16,11 @@ import (
 	"os"
 	"path"
 	"time"
-
-	movingaverage "github.com/RobinUS2/golang-moving-average"
-	"github.com/kardianos/osext"
-	"github.com/urfave/cli"
 )
 
-// AverageDays is the number of days to take, when calculating the average price.
 const Version = "1.0.0"
+
+// AverageDays is the number of days to take, when calculating the average price.
 const AverageDays = 14
 
 const configFileName = "config.json"
@@ -30,6 +32,20 @@ const defaultStartFromDays = 31
 const extraQueryDays = AverageDays + 1
 const cmcQueryURL = "https://web-api.coinmarketcap.com/v1/cryptocurrency/ohlcv/historical"
 const israeliBankURL = "https://www.boi.org.il/currency.xml"
+
+var priorityEndpoint string
+var priorityUsername string
+var priorityPassword string
+
+func priorityLoadCurrencyApiEndpoint(currencySign string) string {
+
+	return fmt.Sprintf(
+		"%s/CURRENCIES('%s')/LOADCURRENCY_SUBFORM",
+		priorityEndpoint,
+		currencySign,
+	)
+
+}
 
 var shekelUsdRatioCache = make(map[string]float64)
 
@@ -307,11 +323,88 @@ func writePriceData(report *Report, currency *Currency, data []*HistoricPriceDat
 
 		}
 
+		if len(priorityEndpoint) != 0 {
+
+			performImportToPriority(
+				currency,
+				priceData.shekelUsdRatio*priceData.average,
+				priceData.priceData.date,
+			)
+
+		}
+
 	}
 
 	fmt.Println()
 
 	return nil
+}
+
+func performImportToPriority(currency *Currency, exchangeRate float64, currencyDate time.Time) {
+
+	fmt.Println(fmt.Sprintf(
+		"Inserting to Priority {%s, %v, %s}...",
+		currency.Name,
+		exchangeRate,
+		currencyDate,
+	))
+
+	data := map[string]interface{}{
+		"EXCHANGE": exchangeRate,
+		"CURDATE":  currencyDate,
+	}
+
+	json_data, err := json.Marshal(data)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	client := &http.Client{}
+
+	req, _ := http.NewRequest(
+		"POST",
+		priorityLoadCurrencyApiEndpoint(currency.Symbol),
+		bytes.NewBuffer(json_data),
+	)
+
+	usernameAndPassword := fmt.Sprintf(
+		"%s:%s",
+		priorityUsername,
+		priorityPassword,
+	)
+
+	authorization := base64.StdEncoding.EncodeToString([]byte(usernameAndPassword, ))
+
+	req.Header.Set(
+		"Authorization",
+		fmt.Sprintf("Basic %s", authorization),
+	)
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if resp.StatusCode != 201 {
+
+		var res map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&res)
+
+		fmt.Print(fmt.Sprintf(
+			"Priority insert ERROR {%v}: ", resp.StatusCode))
+
+		fmt.Println(res["FORM"].(map[string]interface{})["InterfaceErrors"].(map[string]interface{})["text"])
+
+	} else {
+
+		fmt.Println(fmt.Sprintf("Priority insert of Currency %s -> successful!", currency.Name))
+
+	}
+
 }
 
 func processCurrency(report *Report, currency *Currency, startTime *time.Time, endTime *time.Time, report_forDelta *Report, ) error {
@@ -354,9 +447,29 @@ func main() {
 			Value: "now",
 			Usage: `the end of the price calculation period (e.g., "2018-06-20"`,
 		},
+		cli.StringFlag{
+			Name:  "priorityUsername",
+			Value: "",
+			Usage: "The username for priority API client",
+		},
+		cli.StringFlag{
+			Name:  "priorityPassword",
+			Value: "",
+			Usage: "The password for priority API client",
+		},
+		cli.StringFlag{
+			Name:  "priorityEndpoint",
+			Value: "",
+			Usage: "If set, we will try to export currencies into priority, this should be set to test or prod env endpoint uri",
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
+
+		priorityUsername = c.String("priorityUsername")
+		priorityPassword = c.String("priorityPassword")
+		priorityEndpoint = c.String("priorityEndpoint")
+
 		var endTime time.Time
 		rawEndTime := c.String("end")
 		if rawEndTime == "now" {
@@ -436,6 +549,7 @@ func main() {
 	}
 
 	err := app.Run(os.Args)
+
 	if err != nil {
 		log.Fatal(err)
 	}
