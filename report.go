@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/kardianos/osext"
 	"github.com/tealeg/xlsx"
 	"os"
 	"path"
@@ -58,7 +57,7 @@ func generateReportForDeltaFileName(startTime *time.Time, endTime *time.Time) (s
 	}
 	fileName += ".xlsx"
 
-	folderPath, err := osext.ExecutableFolder()
+	folderPath, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
