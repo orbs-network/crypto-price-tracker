@@ -325,9 +325,11 @@ func writePriceData(report *Report, currency *Currency, data []*HistoricPriceDat
 
 		if len(priorityEndpoint) != 0 {
 
+			dailyAverage := (priceData.priceData.open + priceData.priceData.close) / 2
+
 			performImportToPriority(
 				currency,
-				priceData.shekelUsdRatio*priceData.average,
+				priceData.shekelUsdRatio * dailyAverage,
 				priceData.priceData.date,
 			)
 
