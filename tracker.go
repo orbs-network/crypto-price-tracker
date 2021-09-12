@@ -36,6 +36,7 @@ const israeliBankURL = "https://www.boi.org.il/currency.xml"
 var priorityEndpoint string
 var priorityUsername string
 var priorityPassword string
+var daysBackToFetch string
 
 func priorityLoadCurrencyApiEndpoint(currencySign string) string {
 
@@ -189,7 +190,7 @@ func getFromIsraelBank(date time.Time, retries int) (float64, error) {
 
 }
 
-func getPriceData(currency *Currency, startTime *time.Time, endTime *time.Time) ([]*HistoricPriceData, error) {
+func getPriceData(currency *Currency) ([]*HistoricPriceData, error) {
 
 	queryURL, err := url.Parse(cmcQueryURL)
 
@@ -200,8 +201,7 @@ func getPriceData(currency *Currency, startTime *time.Time, endTime *time.Time) 
 	query := queryURL.Query()
 	query.Set("id", currency.CMCId)
 	query.Set("convert", "USD")
-	query.Set("time_start", fmt.Sprintf("%d", startTime.Add(-extraQueryDays*24*time.Hour).Unix()))
-	query.Set("time_end", fmt.Sprintf("%d", endTime.Unix()))
+	query.Set("count", daysBackToFetch)
 	queryURL.RawQuery = query.Encode()
 
 	//Request the HTML page.
@@ -304,6 +304,18 @@ func writePriceData(report *Report, currency *Currency, data []*HistoricPriceDat
 
 		if !exist {
 
+			if len(priorityEndpoint) != 0 {
+
+				dailyAverage := (priceData.priceData.open + priceData.priceData.close) / 2
+
+				performImportToPriority(
+					currency,
+					priceData.shekelUsdRatio*dailyAverage,
+					priceData.priceData.date,
+				)
+
+			}
+
 			err := sheet.AddData(priceData)
 
 			if err != nil {
@@ -320,18 +332,6 @@ func writePriceData(report *Report, currency *Currency, data []*HistoricPriceDat
 
 			// todo: verify new row matches existing row
 			fmt.Println(fmt.Sprintf("skipping existing row for date: %s", priceData.priceData.date))
-
-		}
-
-		if len(priorityEndpoint) != 0 {
-
-			dailyAverage := (priceData.priceData.open + priceData.priceData.close) / 2
-
-			performImportToPriority(
-				currency,
-				priceData.shekelUsdRatio * dailyAverage,
-				priceData.priceData.date,
-			)
 
 		}
 
@@ -409,15 +409,14 @@ func performImportToPriority(currency *Currency, exchangeRate float64, currencyD
 
 }
 
-func processCurrency(report *Report, currency *Currency, startTime *time.Time, endTime *time.Time, report_forDelta *Report, ) error {
+func processCurrency(report *Report, currency *Currency, report_forDelta *Report, ) error {
 
 	fmt.Println("Processing:", currency.Name)
-	fmt.Println("Starting from:", startTime.Format(dateFormat))
-	fmt.Println("Ending at:", endTime.Format(dateFormat))
+	fmt.Println("days count:", daysBackToFetch)
 
 	fmt.Println()
 
-	data, err := getPriceData(currency, startTime, endTime)
+	data, err := getPriceData(currency)
 
 	if err != nil {
 		return err
@@ -440,16 +439,6 @@ func main() {
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
-			Name:  "start",
-			Value: "now",
-			Usage: `the start of the price calculation period (e.g., "2018-06-15"`,
-		},
-		cli.StringFlag{
-			Name:  "end",
-			Value: "now",
-			Usage: `the end of the price calculation period (e.g., "2018-06-20"`,
-		},
-		cli.StringFlag{
 			Name:  "priorityUsername",
 			Value: "",
 			Usage: "The username for priority API client",
@@ -464,6 +453,11 @@ func main() {
 			Value: "",
 			Usage: "If set, we will try to export currencies into priority, this should be set to test or prod env endpoint uri",
 		},
+		cli.StringFlag{
+			Name:  "daysBackToFetch",
+			Value: "15",
+			Usage: "Number of days to fetch from CMC, default is 15. must be above 15 for moving average calculations",
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
@@ -471,30 +465,7 @@ func main() {
 		priorityUsername = c.String("priorityUsername")
 		priorityPassword = c.String("priorityPassword")
 		priorityEndpoint = c.String("priorityEndpoint")
-
-		var endTime time.Time
-		rawEndTime := c.String("end")
-		if rawEndTime == "now" {
-			endTime = time.Now().Local()
-		} else {
-			var err error
-			endTime, err = time.Parse(dateFormat, rawEndTime)
-			if err != nil {
-				return err
-			}
-		}
-
-		var startTime time.Time
-		rawStartTime := c.String("start")
-		if rawStartTime == "now" {
-			startTime = endTime.Add(-defaultStartFromDays * 24 * time.Hour)
-		} else {
-			var err error
-			startTime, err = time.Parse(dateFormat, rawStartTime)
-			if err != nil {
-				return err
-			}
-		}
+		daysBackToFetch = c.String("daysBackToFetch")
 
 		folderPath, err := osext.ExecutableFolder()
 		if err != nil {
@@ -524,7 +495,7 @@ func main() {
 			return err
 		}
 
-		name, err := generateReportForDeltaFileName(&startTime, &endTime)
+		name, err := generateReportForDeltaFileName()
 
 		if err != nil {
 			return err
@@ -539,7 +510,7 @@ func main() {
 		}
 
 		for _, currency := range currencies.Currencies {
-			err := processCurrency(report, &currency, &startTime, &endTime, report_forDelta)
+			err := processCurrency(report, &currency, report_forDelta)
 			if err != nil {
 				return err
 			}

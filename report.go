@@ -50,11 +50,9 @@ type CurrencySheet struct {
 	report *Report
 }
 
-func generateReportForDeltaFileName(startTime *time.Time, endTime *time.Time) (string, error) {
-	fileName := startTime.Format(dateFormat)
-	if startTime != endTime {
-		fileName += "_" + endTime.Format(dateFormat)
-	}
+func generateReportForDeltaFileName() (string, error) {
+	currentTime := time.Now()
+	fileName := currentTime.Format("2006.01.02 15:04:05")
 	fileName += ".xlsx"
 
 	folderPath, err := os.Getwd()
@@ -171,13 +169,16 @@ func (s *CurrencySheet) AddData(data *FullHistoricPriceData) error {
 	cell.SetValue(data.average)
 
 	cell = row.AddCell()
-	cell.SetValue(dateIntToString(data.priceData.date.Day()))
+	day := data.priceData.date.Day()
+	cell.SetValue(dateIntToString(day))
 
 	cell = row.AddCell()
-	cell.SetValue(dateIntToString(int(data.priceData.date.Month())))
+	month := data.priceData.date.Month()
+	cell.SetValue(dateIntToString(int(month)))
 
 	cell = row.AddCell()
-	cell.SetValue(dateIntToString(data.priceData.date.Year()))
+	year := data.priceData.date.Year()
+	cell.SetValue(dateIntToString(year))
 
 	cell = row.AddCell()
 	cell.SetValue(dailyAverage)
@@ -186,7 +187,7 @@ func (s *CurrencySheet) AddData(data *FullHistoricPriceData) error {
 	cell.SetValue(data.shekelUsdRatio)
 
 	cell = row.AddCell()
-	cell.SetValue(data.priceData.date.Format(priorityDateFormat))
+	cell.SetFormula(fmt.Sprintf("DATE(%d, %d, %d)", year, month, day))
 	cell = row.AddCell()
 	cell.SetFloat(data.shekelUsdRatio * dailyAverage)
 
