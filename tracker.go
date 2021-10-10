@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-const Version = "1.0.0"
+const Version = "1.0.1"
 
 // AverageDays is the number of days to take, when calculating the average price.
 const AverageDays = 14
