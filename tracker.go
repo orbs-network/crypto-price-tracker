@@ -376,7 +376,7 @@ func performImportToPriority(currency *Currency, exchangeRate float64, currencyD
 		priorityPassword,
 	)
 
-	authorization := base64.StdEncoding.EncodeToString([]byte(usernameAndPassword, ))
+	authorization := base64.StdEncoding.EncodeToString([]byte(usernameAndPassword))
 
 	req.Header.Set(
 		"Authorization",
@@ -399,7 +399,15 @@ func performImportToPriority(currency *Currency, exchangeRate float64, currencyD
 		fmt.Print(fmt.Sprintf(
 			"Priority insert ERROR {%v}: ", resp.StatusCode))
 
-		fmt.Println(res["FORM"].(map[string]interface{})["InterfaceErrors"].(map[string]interface{})["text"])
+		m, ok := res["FORM"].(map[string]interface{})
+
+		if !ok {
+			fmt.Println(res)
+		} else {
+
+			fmt.Println(m["InterfaceErrors"].(map[string]interface{})["text"])
+
+		}
 
 	} else {
 
@@ -409,7 +417,7 @@ func performImportToPriority(currency *Currency, exchangeRate float64, currencyD
 
 }
 
-func processCurrency(report *Report, currency *Currency, report_forDelta *Report, ) error {
+func processCurrency(report *Report, currency *Currency, report_forDelta *Report) error {
 
 	fmt.Println("Processing:", currency.Name)
 	fmt.Println("days count:", daysBackToFetch)
