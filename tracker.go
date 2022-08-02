@@ -148,7 +148,11 @@ func getFromIsraelBank(date time.Time, retries int) (float64, error) {
 
 	israelBankQueryURL.RawQuery = israelBankQuery.Encode()
 
-	res, err := http.Get(israelBankQueryURL.String())
+	client := &http.Client{}
+	req, _ := http.NewRequest("GET", israelBankQueryURL.String(), nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36")
+	res, _ := client.Do(req)
+
 	if err != nil {
 		return 0, err
 	}
@@ -201,6 +205,7 @@ func getPriceData(currency *Currency) ([]*HistoricPriceData, error) {
 	query := queryURL.Query()
 	query.Set("id", currency.CMCId)
 	query.Set("convert", "USD")
+	query.Set("count", daysBackToFetch)
 	query.Set("count", daysBackToFetch)
 	queryURL.RawQuery = query.Encode()
 
