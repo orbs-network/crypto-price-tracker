@@ -181,7 +181,7 @@ func getFromIsraelBank(date time.Time, retries int) (float64, error) {
 		return 0, err
 	}
 
-	if res.StatusCode != 200 {
+	if res == nil || res.StatusCode != 200 {
 
 		return getFromIsraelBank(
 			date.AddDate(0, 0, -1),
