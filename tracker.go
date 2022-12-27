@@ -26,17 +26,36 @@ const AverageDays = 14
 const configFileName = "config.json"
 const dateFormat = "2006-01-02"
 const priorityDateFormat = "02/01/06"
-const bankOfIsraelDateFormat = "20060102"
+const bankOfIsraelDateFormat = "2006-01-02"
 
 const defaultStartFromDays = 31
 const extraQueryDays = AverageDays + 1
 const cmcQueryURL = "https://web-api.coinmarketcap.com/v1/cryptocurrency/ohlcv/historical"
-const israeliBankURL = "https://www.boi.org.il/currency.xml"
+
+// const israeliBankURL = "https://www.boi.org.il/currency.xml"
+const israeliBankURL = "https://edge.boi.gov.il/FusionEdgeServer/sdmx/v2/data/dataflow/BOI.STATISTICS/EXR/1.0/RER_USD_ILS"
 
 var priorityEndpoint string
 var priorityUsername string
 var priorityPassword string
 var daysBackToFetch string
+
+type OBS struct {
+	XMLName   xml.Name `xml:"Obs"`
+	OBS_VALUE float64  `xml:"OBS_VALUE,attr"`
+}
+type Series struct {
+	XMLName xml.Name `xml:"Series"`
+	OBS     OBS      `xml:"Obs"`
+}
+type MDS struct {
+	XMLName xml.Name `xml:"DataSet"`
+	Series  Series   `xml:"Series"`
+}
+type SSD struct {
+	XMLName xml.Name `message:"StructureSpecificData"`
+	MDS     MDS      `message:"DataSet"`
+}
 
 func priorityLoadCurrencyApiEndpoint(currencySign string) string {
 
@@ -143,13 +162,18 @@ func getFromIsraelBank(date time.Time, retries int) (float64, error) {
 
 	israelBankQuery := israelBankQueryURL.Query()
 
-	israelBankQuery.Set("curr", "01")
-	israelBankQuery.Set("rdate", date.Format(bankOfIsraelDateFormat))
+	//https: //edge.boi.gov.il/FusionEdgeServer/sdmx/v2/data/dataflow/BOI.STATISTICS/EXR/1.0/RER_USD_ILS?startperiod=2008-01-01&endperiod=2008-01-02
+
+	formattedDate := date.Format(bankOfIsraelDateFormat)
+
+	israelBankQuery.Set("startperiod", formattedDate)
+	israelBankQuery.Set("endperiod", formattedDate)
 
 	israelBankQueryURL.RawQuery = israelBankQuery.Encode()
 
 	client := &http.Client{}
-	req, _ := http.NewRequest("GET", israelBankQueryURL.String(), nil)
+	s := israelBankQueryURL.String()
+	req, _ := http.NewRequest("GET", s, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36")
 	res, _ := client.Do(req)
 
@@ -158,30 +182,6 @@ func getFromIsraelBank(date time.Time, retries int) (float64, error) {
 	}
 
 	if res.StatusCode != 200 {
-		return 0, fmt.Errorf("status code error: %d %s", res.StatusCode, res.Status)
-	}
-
-	byteValue, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return 0, err
-	}
-
-	var p struct {
-		CURRENCY struct {
-			RATE float64
-			UNIT uint
-		}
-	}
-
-	xml.Unmarshal(byteValue, &p)
-
-	currency := p.CURRENCY
-
-	if currency.UNIT > 1 {
-		return 0, fmt.Errorf("getShekelConversionRatio: Wrong returned unit number %v", currency.UNIT)
-	}
-
-	if currency.RATE == 0 {
 
 		return getFromIsraelBank(
 			date.AddDate(0, 0, -1),
@@ -190,7 +190,18 @@ func getFromIsraelBank(date time.Time, retries int) (float64, error) {
 
 	}
 
-	return currency.RATE, nil
+	byteValue, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return 0, err
+	}
+
+	var p SSD
+
+	xml.Unmarshal(byteValue, &p)
+
+	currency := p.MDS.Series.OBS
+
+	return currency.OBS_VALUE, nil
 
 }
 
