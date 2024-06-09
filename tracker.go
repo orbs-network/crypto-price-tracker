@@ -30,7 +30,8 @@ const bankOfIsraelDateFormat = "2006-01-02"
 
 const defaultStartFromDays = 31
 const extraQueryDays = AverageDays + 1
-const cmcQueryURL = "https://web-api.coinmarketcap.com/v1/cryptocurrency/ohlcv/historical"
+const cmcQueryURL = "https://api.coinmarketcap.com/data-api/v3/cryptocurrency/historical"
+const cmcKey = "6c12ec7c-37c1-407f-80c9-c9402253034c"
 
 // const israeliBankURL = "https://www.boi.org.il/currency.xml"
 const israeliBankURL = "https://edge.boi.gov.il/FusionEdgeServer/sdmx/v2/data/dataflow/BOI.STATISTICS/EXR/1.0/RER_USD_ILS"
@@ -38,7 +39,7 @@ const israeliBankURL = "https://edge.boi.gov.il/FusionEdgeServer/sdmx/v2/data/da
 var priorityEndpoint string
 var priorityUsername string
 var priorityPassword string
-var daysBackToFetch string
+var daysBackToFetch int64
 
 type OBS struct {
 	XMLName   xml.Name `xml:"Obs"`
@@ -107,8 +108,7 @@ func parseData(quotes []interface{}) []*HistoricPriceData {
 
 	for i := 0; i < len(quotes); i++ {
 		aQuote := quotes[i].(map[string]interface{})
-		p2 := aQuote["quote"].(map[string]interface{})
-		currQuote := p2["USD"].(map[string]interface{})
+		currQuote := aQuote["quote"].(map[string]interface{})
 		var dataElement HistoricPriceData
 		dataElement.date, err = time.Parse(cmcDateFormat, currQuote["timestamp"].(string))
 		if err != nil {
@@ -119,12 +119,13 @@ func parseData(quotes []interface{}) []*HistoricPriceData {
 		dataElement.low = currQuote["low"].(float64)
 		dataElement.close = currQuote["close"].(float64)
 		dataElement.volume = currQuote["volume"].(float64)
-		dataElement.marketCap = int64(currQuote["market_cap"].(float64))
+		dataElement.marketCap = int64(currQuote["marketCap"].(float64))
 
 		data = append(data, &dataElement)
 	}
 
 	return data
+
 }
 
 func getShekelConversionRatio(date time.Time) (shekelDollarRatio float64, err error) {
@@ -207,37 +208,52 @@ func getFromIsraelBank(date time.Time, retries int) (float64, error) {
 
 func getPriceData(currency *Currency) ([]*HistoricPriceData, error) {
 
-	queryURL, err := url.Parse(cmcQueryURL)
+	endDate := time.Now().Unix()
+	startDate := endDate - (60 * 60 * 24 * (daysBackToFetch + 1))
 
+	url := fmt.Sprintf("%s?id=%s&convertId=2781&timeStart=%d&timeEnd=%d&interval=daily&limit=1000",
+		cmcQueryURL,
+		currency.CMCId,
+		startDate,
+		endDate)
+
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	query := queryURL.Query()
-	query.Set("id", currency.CMCId)
-	query.Set("convert", "USD")
-	query.Set("count", daysBackToFetch)
-	query.Set("count", daysBackToFetch)
-	queryURL.RawQuery = query.Encode()
+	req.Header.Set("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
+	req.Header.Set("accept-language", "en-US,en;q=0.9,he;q=0.8")
+	req.Header.Set("cache-control", "no-cache")
+	req.Header.Set("pragma", "no-cache")
+	req.Header.Set("sec-ch-ua", `"Google Chrome";v="105", "Not)A;Brand";v="8", "Chromium";v="105"`)
+	req.Header.Set("sec-ch-ua-mobile", "?0")
+	req.Header.Set("sec-ch-ua-platform", `"macOS"`)
+	req.Header.Set("sec-fetch-dest", "document")
+	req.Header.Set("sec-fetch-mode", "navigate")
+	req.Header.Set("sec-fetch-site", "none")
+	req.Header.Set("sec-fetch-user", "?1")
+	req.Header.Set("upgrade-insecure-requests", "1")
+	req.Header.Set("cookie", "_hjSessionUser_1060636=eyJpZCI6IjM0ZmQwYWZlLWM4ZTAtNTQ4Yy04OTgxLWJhYWQ0ZWRlMTk3YSIsImNyZWF0ZWQiOjE2NTMxNTIyNDQ3OTUsImV4aXN0aW5nIjpmYWxzZX0=; _ga=GA1.2.589864098.1653152245; _gcl_au=1.1.769449889.1664740502; _gid=GA1.2.141148982.1664740502; _tt_enable_cookie=1; _ttp=d60c58f5-5d31-48e9-b62d-a7b9aed1916a; _fbp=fb.1.1664742139841.150092240; sensorsdata2015jssdkcross=%7B%22distinct_id%22%3A%22180e78d616cc14-016c169b911da-34736704-1484784-180e78d616df66%22%2C%22first_id%22%3A%22%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E8%87%AA%E7%84%B6%E6%90%9C%E7%B4%A2%E6%B5%81%E9%87%8F%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC%22%2C%22%24latest_referrer%22%3A%22https%3A%2F%2Fwww.google.com%2F%22%7D%2C%22%24device_id%22%3A%22180e78d616cc14-016c169b911da-34736704-1484784-180e78d616df66%22%2C%22identities%22%3A%22eyIkaWRlbnRpdHlfYW5vbnltb3VzX2lkIjoiMTgwZTc4ZDYxNmNjMTQtMDE2YzE2OWI5MTFkYS0zNDczNjcwNC0xNDg0Nzg0LTE4MGU3OGQ2MTZkZjY2IiwiJGlkZW50aXR5X2Nvb2tpZV9pZCI6IjE4MzlhNWQwZTkxMTg5LTBhNzExN2NmMWUyMTRhOC0xYTUyNTYzNS0xNDg0Nzg0LTE4MzlhNWQwZTkyMWNhOSJ9%22%2C%22history_login_id%22%3A%7B%22name%22%3A%22%22%2C%22value%22%3A%22%22%7D%7D")
 
-	//Request the HTML page.
-	res, err := http.Get(queryURL.String())
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
+	defer resp.Body.Close()
 
-	if res.StatusCode != 200 {
-		return nil, fmt.Errorf("status code error: %d %s", res.StatusCode, res.Status)
-	}
-
-	byteValue, err := ioutil.ReadAll(res.Body)
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("status code error: %d %s", resp.StatusCode, resp.Status)
 	}
 
 	var p map[string]interface{}
-	err = json.Unmarshal(byteValue, &p)
+	err = json.Unmarshal(body, &p)
 	if err != nil {
 		return nil, err
 	}
@@ -477,9 +493,9 @@ func main() {
 			Value: "",
 			Usage: "If set, we will try to export currencies into priority, this should be set to test or prod env endpoint uri",
 		},
-		cli.StringFlag{
+		cli.IntFlag{
 			Name:  "daysBackToFetch",
-			Value: "15",
+			Value: 15,
 			Usage: "Number of days to fetch from CMC, default is 15. must be above 15 for moving average calculations",
 		},
 	}
@@ -489,7 +505,7 @@ func main() {
 		priorityUsername = c.String("priorityUsername")
 		priorityPassword = c.String("priorityPassword")
 		priorityEndpoint = c.String("priorityEndpoint")
-		daysBackToFetch = c.String("daysBackToFetch")
+		daysBackToFetch = c.Int64("daysBackToFetch")
 
 		folderPath, err := osext.ExecutableFolder()
 		if err != nil {
