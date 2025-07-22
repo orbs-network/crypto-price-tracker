@@ -11,6 +11,7 @@ import (
 	"github.com/urfave/cli"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -374,6 +375,11 @@ func writePriceData(report *Report, currency *Currency, data []*HistoricPriceDat
 	return nil
 }
 
+func round5Digits(num float64) float64 {
+	// for priority
+	return math.Round(num*1e5) / 1e5
+}
+
 func performImportToPriority(currency *Currency, exchangeRate float64, currencyDate time.Time) {
 
 	fmt.Println(fmt.Sprintf(
@@ -382,6 +388,8 @@ func performImportToPriority(currency *Currency, exchangeRate float64, currencyD
 		exchangeRate,
 		currencyDate,
 	))
+
+	exchangeRate = round5Digits(exchangeRate)
 
 	data := map[string]interface{}{
 		"EXCHANGE": exchangeRate,
