@@ -402,6 +402,8 @@ func performImportToPriority(currency *Currency, exchangeRate float64, currencyD
 		log.Fatal(err)
 	}
 
+	fmt.Println(string(json_data))
+
 	client := &http.Client{}
 
 	req, _ := http.NewRequest(
@@ -431,7 +433,7 @@ func performImportToPriority(currency *Currency, exchangeRate float64, currencyD
 		log.Fatal(err)
 	}
 
-	if resp.StatusCode != 201 {
+	if resp.StatusCode != 200 {
 
 		var res map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&res)
