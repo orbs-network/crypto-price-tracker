@@ -433,7 +433,7 @@ func performImportToPriority(currency *Currency, exchangeRate float64, currencyD
 		log.Fatal(err)
 	}
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != 201 {
 
 		var res map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&res)
